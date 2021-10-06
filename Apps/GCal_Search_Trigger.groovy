@@ -1,7 +1,7 @@
 def appVersion() { return "2.4.2" }
 /**
  *  GCal Search Trigger Child Application
- *  https://raw.githubusercontent.com/HubitatCommunity/Google_Calendar_Search/main/Apps/GCal_Search_Trigger
+ *  https://raw.githubusercontent.com/aerojsam/Google_Calendar_Search/main/Apps/GCal_Search_Trigger.groovy
  *
  *  Credits:
  *  Originally posted on the SmartThings Community in 2017:https://community.smartthings.com/t/updated-3-27-18-gcal-search/80042
@@ -21,15 +21,53 @@ def appVersion() { return "2.4.2" }
  *
  */
 
+/* logic based on https://github.com/djdizzyd/hubitat/blob/master/Drivers/Honeywell/Advanced-Honeywell-T6-Pro.groovy */
+Map getDeviceInputForms() {
+    
+    return [
+        "switch": [input: [name: "deviceState", type: "enum", title: "Switch Default State", description: "", defaultValue: "off", options: ["on","off"]], parameterSize: 1],
+        "lock": [input: [name: "deviceState", type: "enum", title: "Lock Default State", description: "", defaultValue: "unlocked", options: ["unlocked","locked"]], parameterSize: 1]
+    ]
+}
+
+Map getSupportedDeviceTypes() {
+    return [
+        1: "switch",
+        2: "lock"
+    ]
+}
+
+def convertToState(nativeValue) {
+    switch(nativeValue) {
+        case "on":
+        case "locked":
+			return "engage"
+        case "off":
+        case "unlocked":
+            return "disengage"
+		default:
+            return null
+    }
+}
+
+def convertToNative(deviceState) {
+    switch(state.deviceType) {
+        case "switch":
+            if (deviceState == "engage") return "on" else return "off"
+        case "lock":
+            if (deviceState == "engage") return "locked" else return "unlocked"
+    }
+}
+
 definition(
     name: "GCal Search Trigger",
-    namespace: "HubitatCommunity",
-    author: "Mike Nestor & Anthony Pastor, cometfish, ritchierich",
-    description: "Integrates Hubitat with Google Calendar events to toggle virtual switch.",
+    namespace: "aerojsam",
+    author: "Mike Nestor & Anthony Pastor, cometfish, ritchierich, aerojsam",
+    description: "Integrates Hubitat with Google Calendar events to toggle virtual device.",
     category: "Convenience",
-    parent: "HubitatCommunity:GCal Search",
+    parent: "aerojsam:GCal Search",
     documentationLink: "https://community.hubitat.com/t/release-google-calendar-search/71397",
-    importUrl: "https://raw.githubusercontent.com/HubitatCommunity/Google_Calendar_Search/main/Apps/GCal_Search_Trigger",
+    importUrl: "https://raw.githubusercontent.com/aerojsam/Google_Calendar_Search/main/Apps/GCal_Search_Trigger.groovy",
     iconUrl: "",
     iconX2Url: "",
     iconX3Url: "",
@@ -51,6 +89,15 @@ def selectCalendars() {
 				input name: "resumeButton", type: "button", title: "Resume", backgroundColor: "Crimson", textColor: "white", submitOnChange: true
 			}
 		}
+        
+        section("${parent.getFormat("box", "Select Device Type")}") {
+            input "deviceType", "enum", title: "Select Device Type", multiple: false, required: true, submitOnChange: true, options: getSupportedDeviceTypes()
+            
+            if (deviceType) {
+                state.deviceType = getSupportedDeviceTypes()[deviceType.toInteger()]
+            }
+        }
+        
         section("${parent.getFormat("box", "Search Preferences")}") {
             //we can't do multiple calendars because the api doesn't support it and it could potentially cause a lot of traffic to happen
             input name: "watchCalendars", title:"Which calendar do you want to search?", type: "enum", required:true, multiple:false, options:calendars, submitOnChange: true
@@ -108,21 +155,29 @@ def selectCalendars() {
         }
         
         if ( settings.search ) {
-            section("${parent.getFormat("box", "Child Switch Preferences")}") {
+            section("${parent.getFormat("box", "Child Device Preferences")}") {
                 def defName = settings.search - "\"" - "\"" //.replaceAll(" \" [^a-zA-Z0-9]+","")
-                input name: "deviceName", type: "text", title: "Switch Device Name (Name of the Switch that gets created by this search trigger)", required: true, multiple: false, defaultValue: "${defName} Switch"
-                paragraph "${parent.getFormat("text", "<u>Switch Default Value</u>: Adjust this setting to the switch value preferred when there is no calendar entry. If a calendar entry is found, the switch will toggle from this value.")}"
-                input name: "switchValue", type: "enum", title: "Switch Default Value", required: true, defaultValue: "on", options:["on","off"]
+                
+                input name: "deviceName", type: "text", title: "Device Name (Name of the Device that gets created by this search trigger)", required: true, multiple: false, defaultValue: "${defName} GCal ${state.deviceType.capitalize()}"
+                app.updateSetting("deviceName",[value: "${defName} GCal ${state.deviceType.capitalize()}",type:"text"])
+                
+                paragraph "${parent.getFormat("text", "<u>Device Default State</u>: Adjust this setting to the device state preferred when there is no calendar entry. If a calendar entry is found, the device state is toggled.")}"
+                getDeviceInputForms().each {
+                    if (it.key == state.deviceType) {
+                        input it.value.input
+                    }
+                }
+                
                 paragraph "${parent.getFormat("text", "<u>Date Format</u>: Adjust this setting to your desired date format.  By default time format will be based on the hub's time format setting.  Choose other to enter your own custom date/time format.  Please see <a href='https://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html' target='_blank'>this website</a> for examples.")}"
                 input name: "dateFormat", type: "enum", title: "Date Format", required: true, defaultValue: "yyyy-MM-dd", options:["yyyy-MM-dd", "MM-dd-yyyy", "dd-MM-yyyy", "Other"], submitOnChange: true
                 if ( settings.dateFormat == "Other" ) {
                     input name: "dateFormatOther", type: "text", title: "Enter custom date format", required: true
                 }
-                paragraph "${parent.getFormat("text", "<u>Toggle/Sync Additional Switches</u>: If you would like other existing switches to follow the switch state of the child GCal Switch, set the following list with those switch(es). Please keep in mind that this is one way from the GCal switch to these switches.")}"
-                input name: "controlOtherSwitches", type: "bool", title: "Toggle/Sync Additional Switches?", defaultValue: false, required: false, submitOnChange: true
-                if ( settings.controlOtherSwitches == true ) {
-                    input "syncSwitches", "capability.switch", title: "Synchronize These Switches", multiple: true, required: false
-                    input "reverseSwitches", "capability.switch", title: "Reverse These Switches", multiple: true, required: false
+                paragraph "${parent.getFormat("text", "<u>Toggle/Sync Additional Devices</u>: If you would like other existing devices to follow this device's state, list them here.\n<b>ONE WAY COMMUNICATION ONLY.</b>")}"
+                input name: "controlOtherDevices", type: "bool", title: "Toggle/Sync Additional Devices?", defaultValue: false, required: false, submitOnChange: true
+                if ( settings.controlOtherDevices == true ) {
+                    input "syncDevices", "capability.${state.deviceType}", title: "Synchronize These Devices", multiple: true, required: false
+                    input "reverseDevices", "capability.${state.deviceType}", title: "Reverse These Devices", multiple: true, required: false
                 }
                 paragraph "${parent.getFormat("line")}"
             }
@@ -139,7 +194,7 @@ def selectCalendars() {
             
         if ( state.installed ) {
 	    	section ("Remove Trigger and Corresponding Device") {
-            	paragraph "ATTENTION: The only way to uninstall this trigger and the corresponding child switch device is by clicking the Remove button below. Trying to uninstall the corresponding device from within that device's preferences will NOT work."
+            	paragraph "ATTENTION: The only way to uninstall this trigger and the corresponding child device is by clicking the Remove button below. Trying to uninstall the corresponding device from within that device's preferences will NOT work."
             }
     	}   
 	}       
@@ -174,12 +229,14 @@ def initialize() {
     state.deviceID = "GCal_${app.id}"
     def childDevice = getChildDevice(state.deviceID)
     if (!childDevice) {
-        logDebug("initialize - creating device: deviceID: ${state.deviceID}")
-        childDevice = addChildDevice("HubitatCommunity", "GCal Switch", "GCal_${app.id}", null, [name: "GCal Switch", label: deviceName])
+        def deviceDriverName = "GCal ${state.deviceType.capitalize()}"
+        logDebug("initialize - creating (${state.deviceType.capitalize()}) device: deviceID: ${state.deviceID}")
+        childDevice = addChildDevice("aerojsam", deviceDriverName, "GCal_${app.id}", null, [name: deviceDriverName, label: deviceName])
+        
         childDevice.updateSetting("isDebugEnabled",[value:"${isDebugEnabled}",type:"bool"])
-        childDevice.updateSetting("switchValue",[value:"${switchValue}",type:"enum"])
+        childDevice.updateSetting("deviceState",[value:"${deviceState}",type:"enum"])
     } else {
-        childDevice.updateSetting("switchValue",[value:"${switchValue}",type:"enum"])
+        childDevice.updateSetting("deviceState",[value:"${deviceState}",type:"enum"])
     }
     if (!state.isPaused) {
         if ( settings.whenToRun == "Once Per Day" ) {
@@ -203,8 +260,8 @@ def initialize() {
     }
 }
 
-def getDefaultSwitchValue() {
-    return settings.switchValue
+def getDefaultDeviceState() {
+    return settings.deviceState
 }
 
 def getNextEvents() {
@@ -419,13 +476,13 @@ def poll() {
     childDevice.poll()
 }
 
-def syncChildSwitches(value){
-    if (value == "on") {
-        syncSwitches?.on()
-        reverseSwitches?.off()
-    } else {
-        syncSwitches?.off()
-        reverseSwitches?.on()
+def syncChildDevices(deviceState){
+    if (deviceState == "engage") {
+        syncDevices?.engage()
+        reverseDevices?.disengage()
+    } else if (deviceState == "disengage") {
+        syncDevices?.disengage()
+        reverseDevices?.engage()
     }
 }
 
@@ -487,4 +544,69 @@ private logDebug(msg) {
         }
         log.debug "$msg"
     }
+}
+
+def determineState(defaultValue, currentValue, hasCurrentEvent) {
+    def logMsg = ["determineState - BEFORE hasCurrentEvent: ${hasCurrentEvent}"]
+    
+    def toggleValue = (convertToState(defaultValue) == "engage") ? "disengage" : "engage"
+    logMsg.push("defaultValue: ${defaultValue}, currentValue: ${currentValue}, toggleValue: ${toggleValue} AFTER ")
+    def answer
+    
+    if (currentValue == null) {
+        currentValue = defaultValue
+    }
+    
+    if (hasCurrentEvent) {
+        answer = toggleValue
+    } else {
+        answer = defaultValue
+    }
+    
+    logMsg.push("answer: ${answer}")
+    logDebug("${logMsg}")
+    
+    return answer
+}
+
+def scheduleEvent(nowDateTime, scheduleStartTime, scheduleEndTime, defaultValue, toggleValue) {
+    if (nowDateTime < scheduleStartTime) {
+        scheduleDeviceState(convertToState(toggleValue), scheduleStartTime)
+        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
+        logDebug("Scheduling ${toggleValue} for ${state.deviceType} device at ${scheduleStartTime} and ${defaultValue} at ${scheduleEndTime}")
+        if (currentValue != defaultValue) {
+            logDebug("Turning ${defaultValue} switch")
+            syncValue = defaultValue
+        }
+    } else {
+        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
+        logDebug("Scheduling ${defaultValue} at ${scheduleEndTime}")
+        if (currentValue != toggleValue) {
+            logDebug("Turning ${toggleValue} switch")
+            syncValue = toggleValue
+        }
+    }
+    
+    return syncValue
+}
+
+def scheduleDeviceState(deviceState, eventTime) {
+    logDebug("scheduleDeviceState - scheduling ${state.deviceType} ${deviceState} at ${eventTime}")
+    if (deviceState == "engage") {
+        runOnce(eventTime, engage)
+    } else {
+        runOnce(eventTime, disengage)
+    }
+}
+
+def engage() {
+    logDebug("engage - ${state.deviceType} ${convertToNative("engage")}")
+    sendEvent(name: "${state.deviceType}", value: convertToNative("engage"))
+    syncChildDevices("engage")
+}
+
+def disengage() {
+    logDebug("disengage - ${state.deviceType} ${convertToNative("disengage")}")
+    sendEvent(name: "${state.deviceType}", value: convertToNative("disengage"))
+    syncChildDevices("disengage")
 }
