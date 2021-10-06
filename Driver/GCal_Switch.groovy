@@ -1,7 +1,7 @@
 def driverVersion() { return "2.4.2" }
 /**
  *  GCal Switch Driver
- *  https://raw.githubusercontent.com/HubitatCommunity/Google_Calendar_Search/main/Driver/GCal_Switch.groovy
+ *  https://raw.githubusercontent.com/aerojsam/Google_Calendar_Search/main/Driver/GCal_Switch.groovy
  *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
@@ -16,7 +16,7 @@ def driverVersion() { return "2.4.2" }
  */
 
 metadata {
-	definition (name: "GCal Switch", namespace: "HubitatCommunity", author: "ritchierich") {
+	definition (name: "GCal Switch", namespace: "aerojsam", author: "ritchierich") {
 		capability "Sensor"
         capability "Polling"
 		capability "Refresh"
@@ -65,8 +65,8 @@ def poll() {
 
     def nowDateTime = new Date()
     def currentValue = device.currentSwitch
-    def defaultValue = determineSwitch(false)
-    def toggleValue = determineSwitch(true)
+    def defaultValue = (settings.switchValue == null) ? parent.getDefaultDeviceState() : settings.switchValue
+    def toggleValue = (parent.determineState(defaultValue, currentValue, true) == "engage") ? "on":"off"
     logMsg.push("poll - BEFORE nowDateTime: ${nowDateTime}, currentValue: ${currentValue} AFTER ")
     
     def result = []
@@ -82,25 +82,8 @@ def poll() {
         result << sendEvent(name: "eventStartTime", value: parent.formatDateTime(item.eventStartTime) )
         result << sendEvent(name: "eventEndTime", value: parent.formatDateTime(item.eventEndTime) )
         
-        logMsg.push("nowDateTime(${nowDateTime}) < item.scheduleStartTime(${item.scheduleStartTime})")
-        if (nowDateTime < item.scheduleStartTime) {
-            scheduleSwitch(toggleValue, item.scheduleStartTime)
-            scheduleSwitch(defaultValue, item.scheduleEndTime)
-            logMsg.push("Scheduling ${toggleValue} at ${item.scheduleStartTime} and ${defaultValue} at ${item.scheduleEndTime}")
-            if (currentValue != defaultValue) {
-                logMsg.push("Turning ${defaultValue} switch")
-                result << sendEvent(name: "switch", value: defaultValue)
-                syncValue = defaultValue
-            }
-        } else {
-            scheduleSwitch(defaultValue, item.scheduleEndTime)
-            logMsg.push("Scheduling ${defaultValue} at ${item.scheduleEndTime}")
-            if (currentValue != toggleValue) {
-                logMsg.push("Turning ${toggleValue} switch")
-                result << sendEvent(name: "switch", value: toggleValue)
-                syncValue = toggleValue
-            }
-        }
+        syncValue = parent.scheduleEvent(nowDateTime, item.scheduleStartTime, item.scheduleEndTime, defaultValue, toggleValue)
+        result << sendEvent(name: "switch", value: syncValue)
     } else {
         logMsg.push("no events found, turning ${defaultValue} switch")
         result << sendEvent(name: "eventTitle", value: " ")
@@ -112,70 +95,13 @@ def poll() {
         syncValue = defaultValue
     }
     
-    syncChildSwitches(syncValue)
+    syncChildDevices(syncValue)
     logDebug("${logMsg}")
     return result
 }
 
-def on() {
-    sendEvent(name: "switch", value: "on")
-    syncChildSwitches("on")
-}
-
-def off() {
-    sendEvent(name: "switch", value: "off")
-    syncChildSwitches("off")
-}
-
-def determineSwitch(hasCurrentEvent) {
-    def logMsg = ["determineSwitch - BEFORE hasCurrentEvent: ${hasCurrentEvent}"]
-    def currentValue = device.currentSwitch
-    def defaultValue = (settings.switchValue == null) ? parent.getDefaultSwitchValue() : settings.switchValue
-    def toggleValue = (defaultValue == "on") ? "off" : "on"
-    logMsg.push("currentValue: ${currentValue}, defaultValue: ${defaultValue}, toggleValue: ${toggleValue} AFTER ")
-    def answer
-    
-    if (currentValue == null) {
-        currentValue = defaultValue
-    }
-    
-    if (hasCurrentEvent) {
-        answer = toggleValue
-    } else {
-        answer = defaultValue
-    }
-    
-    logMsg.push("answer: ${answer}")
-    logDebug("${logMsg}")
-    
-    return answer
-}
-
-def scheduleSwitch(type, eventTime) {
-    logDebug("scheduleSwitch - scheduling switch ${type} at ${eventTime}")
-    if (type == "on") {
-        runOnce(eventTime, scheduleOn)
-    } else {
-        runOnce(eventTime, scheduleOff)
-    }
-}
-
-def scheduleOn() {
-    logDebug("scheduleOn - turning on switch}")
-    on()
-}
-
-def scheduleOff() {
-    logDebug("scheduleOff - turning off switch}")
-    off()
-}
-
 def clearEventCache() {
     parent.clearEventCache()
-}
-
-def syncChildSwitches(value) {
-    parent.syncChildSwitches(value)
 }
 
 private logDebug(msg) {
