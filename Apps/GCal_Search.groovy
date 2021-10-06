@@ -1,7 +1,7 @@
 def appVersion() { return "2.4.2" }
 /**
  *  GCal Search
- *  https://raw.githubusercontent.com/HubitatCommunity/Google_Calendar_Search/main/Apps/GCal_Search.groovy
+ *  https://raw.githubusercontent.com/aerojsam/Google_Calendar_Search/main/Apps/GCal_Search.groovy
  *
  *  Credits:
  *  Originally posted on the SmartThings Community in 2017:https://community.smartthings.com/t/updated-3-27-18-gcal-search/80042
@@ -23,12 +23,12 @@ def appVersion() { return "2.4.2" }
 
 definition(
     name: "GCal Search",
-    namespace: "HubitatCommunity",
-    author: "Mike Nestor & Anthony Pastor, cometfish, ritchierich",
-    description: "Integrates Hubitat with Google Calendar events to toggle virtual switch.",
+    namespace: "aerojsam",
+    author: "Mike Nestor & Anthony Pastor, cometfish, ritchierich, aerojsam",
+    description: "Integrates Hubitat with Google Calendar events to toggle a supported virtual device.",
     category: "Convenience",
     documentationLink: "https://community.hubitat.com/t/release-google-calendar-search/71397",
-    importUrl: "https://raw.githubusercontent.com/HubitatCommunity/Google_Calendar_Search/main/Apps/GCal_Search.groovy",
+    importUrl: "https://raw.githubusercontent.com/aerojsam/Google_Calendar_Search/main/Apps/GCal_Search.groovy",
     iconUrl: "",
     iconX2Url: "",
     iconX3Url: "",
@@ -45,12 +45,12 @@ preferences {
 }
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "${getFormat("title", "GCal Search Version " + appVersion())}", uninstall: false, install: true) {
+    dynamicPage(name: "mainPage", title: "${getFormat("title", "${app.label?:app.name} Version " + appVersion())}", uninstall: false, install: true) {
         if (atomicState.authToken) {
             getCalendarList()
-
+            
             section() {
-                app(name: "childApps", appName: "GCal Search Trigger", namespace: "HubitatCommunity", title: "New Calendar Search...", multiple: true)
+                app(name: "childApps", appName: "${app.label?:app.name} Trigger", namespace: "aerojsam", title: "New Calendar Search...", multiple: true)
                 paragraph "${getFormat("line")}"
             }
         }	  
@@ -225,7 +225,7 @@ def utilitiesPage() {
         section() {
             paragraph "${getFormat("text", "<b>All commands take effect immediately!</b>")}"
             input "clearCache", "bool", title: "Clear event cache", required: false, defaultValue: false, submitOnChange: true
-            input "resyncNow", "bool", title: "Sync all calendar searches now.  FYI You can sync individual calendar searches by clicking the Poll button within the child switch.", required: false, defaultValue: false, submitOnChange: true
+            input "resyncNow", "bool", title: "Sync all calendar searches now.  FYI You can sync individual calendar searches by clicking the Poll button within the child device.", required: false, defaultValue: false, submitOnChange: true
 		}
     }
 }
