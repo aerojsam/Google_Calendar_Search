@@ -582,7 +582,12 @@ def determineState(defaultValue, currentValue, hasCurrentEvent) {
     return answer
 }
 
-def scheduleEvent(nowDateTime, scheduleStartTime, scheduleEndTime, defaultValue, toggleValue) {
+def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
+    def nowDateTime = new Date()
+    def defaultValue = dataSet.defaultValue
+    def currentValue = dataSet.currentValue
+    def toggleValue = dataSet.toggleValue
+    
     if (nowDateTime < scheduleStartTime) {
         scheduleDeviceState(convertToState(toggleValue), scheduleStartTime)
         scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
@@ -592,6 +597,7 @@ def scheduleEvent(nowDateTime, scheduleStartTime, scheduleEndTime, defaultValue,
             syncValue = defaultValue
         }
     } else {
+        // past start time schedule...just schedule for end time
         scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
         logDebug("Scheduling ${defaultValue} at ${scheduleEndTime}")
         if (currentValue != toggleValue) {
@@ -614,10 +620,12 @@ def scheduleDeviceState(deviceState, eventTime) {
 
 def engage() {
     logDebug("engage - ${state.deviceType} ${convertToNative("engage")}")
-    sendEvent(name: "${state.deviceType}", value: convertToNative("engage"))
+    def childDevice = getChildDevice(state.deviceID)
+    childDevice.engage()
 }
 
 def disengage() {
     logDebug("disengage - ${state.deviceType} ${convertToNative("disengage")}")
-    sendEvent(name: "${state.deviceType}", value: convertToNative("disengage"))
+    def childDevice = getChildDevice(state.deviceID)
+    childDevice.disengage()
 }
