@@ -59,6 +59,15 @@ def convertToNative(deviceState) {
     }
 }
 
+def convertToNativeMethod(deviceState) {
+    switch(state.deviceType) {
+        case "switch":
+            if (deviceState == "engage") return "on" else return "off"
+        case "lock":
+            if (deviceState == "engage") return "lock" else return "unlock"
+    }
+}
+
 definition(
     name: "GCal Search Trigger",
     namespace: "aerojsam",
@@ -95,6 +104,10 @@ def selectCalendars() {
             
             if (deviceType) {
                 state.deviceType = getSupportedDeviceTypes()[deviceType.toInteger()]
+                state.deviceEngageMethod = convertToNativeMethod("engage")
+                state.deviceDisengageMethod = convertToNativeMethod("disengage")
+                logDebug "engage Native Method: ${state.deviceEngageMethod}"
+                logDebug "disengage Native Method: ${state.deviceDisengageMethod}"
             }
         }
         
@@ -478,11 +491,11 @@ def poll() {
 
 def syncChildDevices(deviceState){
     if (deviceState == "engage") {
-        syncDevices?.engage()
-        reverseDevices?.disengage()
+        syncDevices?."${state.deviceEngageMethod}"()
+        reverseDevices?."${state.deviceDisengageMethod}"()
     } else if (deviceState == "disengage") {
-        syncDevices?.disengage()
-        reverseDevices?.engage()
+        syncDevices?."${state.deviceDisengageMethod}"()
+        reverseDevices?."${state.deviceEngageMethod}"()
     }
 }
 
@@ -602,11 +615,9 @@ def scheduleDeviceState(deviceState, eventTime) {
 def engage() {
     logDebug("engage - ${state.deviceType} ${convertToNative("engage")}")
     sendEvent(name: "${state.deviceType}", value: convertToNative("engage"))
-    syncChildDevices("engage")
 }
 
 def disengage() {
     logDebug("disengage - ${state.deviceType} ${convertToNative("disengage")}")
     sendEvent(name: "${state.deviceType}", value: convertToNative("disengage"))
-    syncChildDevices("disengage")
 }
