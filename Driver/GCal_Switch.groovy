@@ -104,6 +104,10 @@ def clearEventCache() {
     parent.clearEventCache()
 }
 
+def syncChildDevices(value) {
+    parent.syncChildDevices(parent.convertToState(value))
+}
+
 private logDebug(msg) {
     if (isDebugEnabled != null && isDebugEnabled != false) {
         if (msg instanceof List && msg.size() > 0) {

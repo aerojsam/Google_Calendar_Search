@@ -17,7 +17,7 @@ def driverVersion() { return "2.4.2" }
 metadata {
 	definition (name: "GCal Lock", namespace: "aerojsam", author: "sammyj") {        
         capability "Actuator"
-        capability "Lock"
+        //capability "Lock"
         capability "Polling"
         capability "Refresh"
         
@@ -101,6 +101,10 @@ def poll() {
 
 def clearEventCache() {
     parent.clearEventCache()
+}
+
+def syncChildDevices(value) {
+    parent.syncChildDevices(parent.convertToState(value))
 }
 
 private logDebug(msg) {
