@@ -22,30 +22,29 @@ def appVersion() { return "2.4.2" }
  */
 
 /* logic based on https://github.com/djdizzyd/hubitat/blob/master/Drivers/Honeywell/Advanced-Honeywell-T6-Pro.groovy */
-Map getDeviceInputForms() {
-    
-    return [
-        "switch": [input: [name: "deviceState", type: "enum", title: "Switch Default State", description: "", defaultValue: "off", options: ["on","off"]], parameterSize: 1],
-        "lock": [input: [name: "deviceState", type: "enum", title: "Lock Default State", description: "", defaultValue: "unlocked", options: ["unlocked","locked"]], parameterSize: 1]
-    ]
-}
 
 Map getSupportedDeviceTypes() {
     return [
         1: "switch",
-        2: "lock"
+        2: "lock",
+        3: "lockcode"
     ]
 }
 
 def convertToState(nativeValue) {
-    switch(nativeValue) {
-        case "on":
-        case "locked":
-			return "engage"
-        case "off":
-        case "unlocked":
-            return "disengage"
-		default:
+    switch(state.deviceType) {
+        case "switch":
+            if (nativeValue == "on") return "engage" else return "disengage"
+        case "lock":
+            if (nativeValue == "locked") return "engage" else return "disengage"
+        case "lockcode":
+            // value of "" is a disengage state
+            if (nativeValue != "") {
+                return "engage"
+            } else {
+                return "disengage"
+            }
+        default:
             return null
     }
 }
@@ -56,6 +55,8 @@ def convertToNative(deviceState) {
             if (deviceState == "engage") return "on" else return "off"
         case "lock":
             if (deviceState == "engage") return "locked" else return "unlocked"
+        case "lockcode":
+            if (deviceState == "engage") return "setCode" else return "deleteCode"
     }
 }
 
@@ -84,13 +85,14 @@ definition(
 
 preferences {
 	page(name: "selectCalendars")
+	page(name: "spawnDevice")
 }
 
 def selectCalendars() {
     def calendars = parent.getCalendarList()
     logDebug "selectCalendars - Calendar list = ${calendars}"
     
-    return dynamicPage(name: "selectCalendars", title: "${parent.getFormat("title", "GCal Search Trigger Version ${appVersion()}, Create new calendar search")}", install: true, uninstall: true, nextPage: "" ) {
+    return dynamicPage(name: "selectCalendars", title: "${parent.getFormat("title", "GCal Search Trigger Version ${appVersion()}")}", uninstall: true, nextPage: "spawnDevice", params: [deviceType: deviceType]) {
     	section(){
 			if (!state.isPaused) {
 				input name: "pauseButton", type: "button", title: "Pause", backgroundColor: "Green", textColor: "white", submitOnChange: true
@@ -174,13 +176,6 @@ def selectCalendars() {
                 input name: "deviceName", type: "text", title: "Device Name (Name of the Device that gets created by this search trigger)", required: true, multiple: false, defaultValue: "${defName} GCal ${state.deviceType.capitalize()}"
                 app.updateSetting("deviceName",[value: "${defName} GCal ${state.deviceType.capitalize()}",type:"text"])
                 
-                paragraph "${parent.getFormat("text", "<u>Device Default State</u>: Adjust this setting to the device state preferred when there is no calendar entry. If a calendar entry is found, the device state is toggled.")}"
-                getDeviceInputForms().each {
-                    if (it.key == state.deviceType) {
-                        input it.value.input
-                    }
-                }
-                
                 paragraph "${parent.getFormat("text", "<u>Date Format</u>: Adjust this setting to your desired date format.  By default time format will be based on the hub's time format setting.  Choose other to enter your own custom date/time format.  Please see <a href='https://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html' target='_blank'>this website</a> for examples.")}"
                 input name: "dateFormat", type: "enum", title: "Date Format", required: true, defaultValue: "yyyy-MM-dd", options:["yyyy-MM-dd", "MM-dd-yyyy", "dd-MM-yyyy", "Other"], submitOnChange: true
                 if ( settings.dateFormat == "Other" ) {
@@ -210,7 +205,28 @@ def selectCalendars() {
             	paragraph "ATTENTION: The only way to uninstall this trigger and the corresponding child device is by clicking the Remove button below. Trying to uninstall the corresponding device from within that device's preferences will NOT work."
             }
     	}   
-	}       
+	}
+}
+
+def spawnDevice(deviceType) {
+    log.debug "spawnDevice() - Spawn ${state.deviceType} Device"
+    
+    state.deviceID = "GCal_${app.id}"
+    def childDevice = getChildDevice(state.deviceID)
+    
+    if (!childDevice) {
+        def deviceDriverName = "GCal ${state.deviceType.capitalize()}"
+        childDevice = addChildDevice("aerojsam", deviceDriverName, "GCal_${app.id}", null, [name: deviceDriverName, label: deviceName])
+        log.debug("spawnDevice - created ${deviceDriverName} device (${state.deviceType.capitalize()}) device: deviceID: ${state.deviceID}")
+    }
+    
+    return dynamicPage(name: "deviceSettings", title: "${parent.getFormat("title", "${state.deviceType.capitalize()} Device Settings")}", install: true, uninstall: true, nextPage: "" ) {
+        section ("${parent.getFormat("box", "Settings")}") {
+            childDevice.deviceSettings().each {
+                input it.value.input
+            }
+        }
+    }
 }
 
 def installed() {
@@ -239,18 +255,9 @@ def initialize() {
     // Sets Label of Trigger
     updateAppLabel()
     
-    state.deviceID = "GCal_${app.id}"
-    def childDevice = getChildDevice(state.deviceID)
-    if (!childDevice) {
-        def deviceDriverName = "GCal ${state.deviceType.capitalize()}"
-        logDebug("initialize - creating (${state.deviceType.capitalize()}) device: deviceID: ${state.deviceID}")
-        childDevice = addChildDevice("aerojsam", deviceDriverName, "GCal_${app.id}", null, [name: deviceDriverName, label: deviceName])
-        
-        childDevice.updateSetting("isDebugEnabled",[value:"${isDebugEnabled}",type:"bool"])
-        childDevice.updateSetting("deviceState",[value:"${deviceState}",type:"enum"])
-    } else {
-        childDevice.updateSetting("deviceState",[value:"${deviceState}",type:"enum"])
-    }
+    // At this point, device has already been created during the spawnDevice() routine
+    childDevice.updateSetting("deviceState",[value:"${deviceState}",type:"enum"])
+    
     if (!state.isPaused) {
         if ( settings.whenToRun == "Once Per Day" ) {
             schedule(timeToRun, poll)
@@ -559,16 +566,13 @@ private logDebug(msg) {
     }
 }
 
+/* REMOVE THIS!!!
 def determineState(defaultValue, currentValue, hasCurrentEvent) {
     def logMsg = ["determineState - BEFORE hasCurrentEvent: ${hasCurrentEvent}"]
     
     def toggleValue = (convertToState(defaultValue) == "engage") ? "disengage" : "engage"
     logMsg.push("defaultValue: ${defaultValue}, currentValue: ${currentValue}, toggleValue: ${toggleValue} AFTER ")
     def answer
-    
-    if (currentValue == null) {
-        currentValue = defaultValue
-    }
     
     if (hasCurrentEvent) {
         answer = toggleValue
@@ -581,6 +585,7 @@ def determineState(defaultValue, currentValue, hasCurrentEvent) {
     
     return answer
 }
+*/
 
 def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
     def nowDateTime = new Date()
@@ -589,19 +594,19 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
     def toggleValue = dataSet.toggleValue
     
     if (nowDateTime < scheduleStartTime) {
-        scheduleDeviceState(convertToState(toggleValue), scheduleStartTime)
-        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
+        scheduleDeviceState(convertToState(toggleValue), scheduleStartTime, toggleValue)
+        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime, null)
         logDebug("Scheduling ${toggleValue} for ${state.deviceType} device at ${scheduleStartTime} and ${defaultValue} at ${scheduleEndTime}")
         if (currentValue != defaultValue) {
-            logDebug("Turning ${defaultValue} switch")
+            logDebug("Set ${state.deviceType} ${defaultValue}")
             syncValue = defaultValue
         }
     } else {
         // past start time schedule...just schedule for end time
-        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
+        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime , null)
         logDebug("Scheduling ${defaultValue} at ${scheduleEndTime}")
         if (currentValue != toggleValue) {
-            logDebug("Turning ${toggleValue} switch")
+            logDebug("Set ${state.deviceType} ${toggleValue}")
             syncValue = toggleValue
         }
     }
@@ -609,22 +614,22 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
     return syncValue
 }
 
-def scheduleDeviceState(deviceState, eventTime) {
+def scheduleDeviceState(deviceState, eventTime, data) {
     logDebug("scheduleDeviceState - scheduling ${state.deviceType} ${deviceState} at ${eventTime}")
     if (deviceState == "engage") {
-        runOnce(eventTime, engage)
+        runOnce(eventTime, engage, [data: data])
     } else {
-        runOnce(eventTime, disengage)
+        runOnce(eventTime, disengage, null)
     }
 }
 
-def engage() {
+def engage(data) {
     logDebug("engage - ${state.deviceType} ${convertToNative("engage")}")
     def childDevice = getChildDevice(state.deviceID)
-    childDevice.engage()
+    childDevice.engage(data)
 }
 
-def disengage() {
+def disengage(data) {
     logDebug("disengage - ${state.deviceType} ${convertToNative("disengage")}")
     def childDevice = getChildDevice(state.deviceID)
     childDevice.disengage()
