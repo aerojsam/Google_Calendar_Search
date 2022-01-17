@@ -491,15 +491,19 @@ def poll() {
 
 def syncChildDevices(deviceState){
 	def childDevice = getChildDevice(state.deviceID)
-    def engageRoutine = childDevice.nativeMethods().get(engage)
-    def disengageRoutine = childDevice.nativeMethods().get(disengage)
+    def engageRoutine = childDevice.nativeMethods().get(engage)[0]
+    log.debug "engageRoutine: ${engageRoutine}"
+    def engageRoutineArgs = childDevice.nativeMethods().get(engage)[1]
+    log.debug "engageRoutineArgs: ${engageRoutineArgs}"
+    def disengageRoutine = childDevice.nativeMethods().get(disengage)[0]
+    def disengageRoutineArgs = childDevice.nativeMethods().get(disengage)[1]
     
     if (deviceState == "engage") {
-        syncDevices?."${engageRoutine}"()
-        reverseDevices?."${disengageRoutine}"()
+        syncDevices?."${engageRoutine}"(*engageRoutineArgs)
+        reverseDevices?."${disengageRoutine}"(*disengageRoutineArgs)
     } else if (deviceState == "disengage") {
-        syncDevices?."${disengageRoutine}"()
-        reverseDevices?."${engageRoutine}"()
+        syncDevices?."${disengageRoutine}"(*disengageRoutineArgs)
+        reverseDevices?."${engageRoutine}"(*engageRoutineArgs)
     }
 }
 
@@ -591,8 +595,8 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
     def toggleValue = dataSet.toggleValue
     
     if (nowDateTime < scheduleStartTime) {
-        scheduleDeviceState(convertToState(toggleValue), scheduleStartTime, toggleValue)
-        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime, null)
+        scheduleDeviceState(convertToState(toggleValue), scheduleStartTime)
+        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
         logDebug("Scheduling ${toggleValue} for ${state.deviceType} device at ${scheduleStartTime} and ${defaultValue} at ${scheduleEndTime}")
 		// reset to default state if current state is not the default case, before the scheduling triggers
         if (currentValue != defaultValue) {
@@ -601,7 +605,7 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
         }
     } else {
         // past start time schedule...just schedule for end time
-        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime , null)
+        scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
         logDebug("Scheduling ${defaultValue} at ${scheduleEndTime}")
 		// reset to default state if current state is not the default case, before the scheduling triggers
         if (currentValue != toggleValue) {
@@ -616,19 +620,19 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
     return syncValue
 }
 
-def scheduleDeviceState(deviceState, eventTime, data) {
+def scheduleDeviceState(deviceState, eventTime) {
     logDebug("scheduleDeviceState - scheduling ${state.deviceType} ${deviceState} at ${eventTime}")
     if (deviceState == "engage") {
-        runOnce(eventTime, engage, [data: data])
+        runOnce(eventTime, engage)
     } else {
-        runOnce(eventTime, disengage, null)
+        runOnce(eventTime, disengage)
     }
 }
 
-def engage(data) {
+def engage() {
     logDebug("engage - ${state.deviceType}")
     def childDevice = getChildDevice(state.deviceID)
-    childDevice.engage(data)
+    childDevice.engage()
 }
 
 def disengage(data) {
