@@ -175,7 +175,13 @@ def selectCalendars() {
                 paragraph "${parent.getFormat("text", "<u>Toggle/Sync Additional Devices</u>: If you would like other existing devices to follow this device's state, list them here.\n<b>ONE WAY COMMUNICATION ONLY.</b>")}"
                 input name: "controlOtherDevices", type: "bool", title: "Toggle/Sync Additional Devices?", defaultValue: false, required: false, submitOnChange: true
                 if ( settings.controlOtherDevices == true ) {
-                    input "syncDevices", "capability.${state.deviceType}", title: "Synchronize These Devices", multiple: true, required: false
+                    def syncDevType = state.deviceType
+                    // lockcode types are really lock devices, but HE does not recognize as such, so do that here
+                    if ( state.deviceType == "lockcode" ) {
+                        syncDevType = "lock"
+                    }
+                    
+                    input "syncDevices", "capability.${syncDevType}", title: "Synchronize These Devices", multiple: true, required: false
                     input "reverseDevices", "capability.${state.deviceType}", title: "Reverse These Devices", multiple: true, required: false
                 }
                 paragraph "${parent.getFormat("line")}"
@@ -485,15 +491,16 @@ def poll() {
 
 def syncChildDevices(deviceState){
 	def childDevice = getChildDevice(state.deviceID)
-	childDevice.nativeMethods().each {
-		if (deviceState == "engage") {
-			syncDevices?."${it.value.engage}"
-			reverseDevices?."${it.value.disengage}"
-		} else if (deviceState == "disengage") {
-			syncDevices?."${it.value.disengage}"
-			reverseDevices?."${it.value.engage}"
-		}
-	}
+    def engageRoutine = childDevice.nativeMethods().get(engage)
+    def disengageRoutine = childDevice.nativeMethods().get(disengage)
+    
+    if (deviceState == "engage") {
+        syncDevices?."${engageRoutine}"()
+        reverseDevices?."${disengageRoutine}"()
+    } else if (deviceState == "disengage") {
+        syncDevices?."${disengageRoutine}"()
+        reverseDevices?."${engageRoutine}"()
+    }
 }
 
 private uninstalled() {
@@ -600,6 +607,9 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
         if (currentValue != toggleValue) {
             logDebug("Set ${state.deviceType} ${toggleValue}")
             syncValue = toggleValue
+        } else {
+            // otherwise, just keep the cycle going
+            syncValue = currentValue
         }
     }
     
