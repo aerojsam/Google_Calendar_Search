@@ -49,23 +49,14 @@ def convertToState(nativeValue) {
     }
 }
 
-def convertToNative(deviceState) {
-    switch(state.deviceType) {
-        case "switch":
-            if (deviceState == "engage") return "on" else return "off"
-        case "lock":
-            if (deviceState == "engage") return "locked" else return "unlocked"
-        case "lockcode":
-            if (deviceState == "engage") return "setCode" else return "deleteCode"
-    }
-}
-
 def convertToNativeMethod(deviceState) {
     switch(state.deviceType) {
         case "switch":
             if (deviceState == "engage") return "on" else return "off"
         case "lock":
             if (deviceState == "engage") return "lock" else return "unlock"
+        case "lockcode":
+            if (deviceState == "engage") return "setCode" else return "deleteCode"
     }
 }
 
@@ -278,10 +269,6 @@ def initialize() {
             logDebug("initialize - creating schedule with cron string: ${cronString}")
         }
     }
-}
-
-def getDefaultDeviceState() {
-    return settings.deviceState
 }
 
 def getNextEvents() {
@@ -497,13 +484,16 @@ def poll() {
 }
 
 def syncChildDevices(deviceState){
-    if (deviceState == "engage") {
-        syncDevices?."${state.deviceEngageMethod}"()
-        reverseDevices?."${state.deviceDisengageMethod}"()
-    } else if (deviceState == "disengage") {
-        syncDevices?."${state.deviceDisengageMethod}"()
-        reverseDevices?."${state.deviceEngageMethod}"()
-    }
+	def childDevice = getChildDevice(state.deviceID)
+	childDevice.nativeMethods().each {
+		if (deviceState == "engage") {
+			syncDevices?."${it.value.engage}"
+			reverseDevices?."${it.value.disengage}"
+		} else if (deviceState == "disengage") {
+			syncDevices?."${it.value.disengage}"
+			reverseDevices?."${it.value.engage}"
+		}
+	}
 }
 
 private uninstalled() {
@@ -597,6 +587,7 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
         scheduleDeviceState(convertToState(toggleValue), scheduleStartTime, toggleValue)
         scheduleDeviceState(convertToState(defaultValue), scheduleEndTime, null)
         logDebug("Scheduling ${toggleValue} for ${state.deviceType} device at ${scheduleStartTime} and ${defaultValue} at ${scheduleEndTime}")
+		// reset to default state if current state is not the default case, before the scheduling triggers
         if (currentValue != defaultValue) {
             logDebug("Set ${state.deviceType} ${defaultValue}")
             syncValue = defaultValue
@@ -605,6 +596,7 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
         // past start time schedule...just schedule for end time
         scheduleDeviceState(convertToState(defaultValue), scheduleEndTime , null)
         logDebug("Scheduling ${defaultValue} at ${scheduleEndTime}")
+		// reset to default state if current state is not the default case, before the scheduling triggers
         if (currentValue != toggleValue) {
             logDebug("Set ${state.deviceType} ${toggleValue}")
             syncValue = toggleValue
@@ -624,13 +616,13 @@ def scheduleDeviceState(deviceState, eventTime, data) {
 }
 
 def engage(data) {
-    logDebug("engage - ${state.deviceType} ${convertToNative("engage")}")
+    logDebug("engage - ${state.deviceType}")
     def childDevice = getChildDevice(state.deviceID)
     childDevice.engage(data)
 }
 
 def disengage(data) {
-    logDebug("disengage - ${state.deviceType} ${convertToNative("disengage")}")
+    logDebug("disengage - ${state.deviceType}")
     def childDevice = getChildDevice(state.deviceID)
     childDevice.disengage()
 }
