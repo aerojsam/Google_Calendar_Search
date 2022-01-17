@@ -15,7 +15,7 @@ def driverVersion() { return "2.4.2" }
  */
 
 metadata {
-	definition (name: "GCal Lock", namespace: "aerojsam", author: "sammyj") {        
+	definition (name: "GCal Lock", namespace: "aerojsam", author: "Samuel Jimenez") {        
         capability "Actuator"
         //capability "Lock"
         capability "Polling"
@@ -36,6 +36,15 @@ metadata {
         input name: "lockValue", type: "enum", title: "Lock Default Value", required: true, options:["locked","unlocked"]
     }
 }
+
+/*>> DEVICE SETTINGS: LOCK >>*/
+/* USED BY TRIGGER APP. TO ACCESS, USE parent.<setting>. */
+Map deviceSettings() {
+    return [
+        1: [input: [name: "deviceState", type: "enum", title: "Lock Default State", description: "", defaultValue: "unlock", options: ["lock","unlock"]], required: true, submitOnChange: true, parameterSize: 1]
+    ]
+}
+/*<< DEVICE SETTINGS: LOCK <<*/
 
 def installed() {
     initialize()
@@ -62,37 +71,48 @@ def poll() {
     unschedule()
     def logMsg = []
 
-    def nowDateTime = new Date()
     def currentValue = device.currentLock
-    def defaultValue = (settings.switchValue == null) ? parent.getDefaultDeviceState() : settings.switchValue
+    def defaultValue = (settings.lockValue == null) ? parent.getDefaultDeviceState() : settings.lockValue
     def toggleValue = (parent.determineState(defaultValue, currentValue, true) == "engage") ? "locked":"unlocked"
-    logMsg.push("poll - BEFORE nowDateTime: ${nowDateTime}, currentValue: ${currentValue} AFTER ")
+    def toggleValue = (defaultValue == "lock") ? "unlock":"lock"
+    logMsg.push("poll - BEFORE (${new Date()}) - currentValue: ${currentValue} AFTER ")
     
     def result = []
     def syncValue
-    result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(nowDateTime), displayed: false)
     def item = parent.getNextEvents()
+    
+    def eventTitle = " "
+    def eventLocation = " "
+    def eventAllDay = " "
+    def eventStartTime = " "
+    def eventEndTime = " "
+    def eventReservationURL = " "
+    def eventLast4Tel = " "
+    
     if (item && item.eventTitle) {
         logMsg.push("event found, item: ${item}")
         
-        result << sendEvent(name: "eventTitle", value: item.eventTitle )
-        result << sendEvent(name: "eventLocation", value: item.eventLocation )
-        result << sendEvent(name: "eventAllDay", value: item.eventAllDay )
-        result << sendEvent(name: "eventStartTime", value: parent.formatDateTime(item.eventStartTime) )
-        result << sendEvent(name: "eventEndTime", value: parent.formatDateTime(item.eventEndTime) )
+        eventTitle = item.eventTitle
+        eventLocation = item.eventLocation
+        eventAllDay = item.eventAllDay
+        eventStartTime = parent.formatDateTime(item.eventStartTime)
+        eventEndTime = parent.formatDateTime(item.eventEndTime)
+        eventReservationURL = item.eventReservationURL
+        eventLast4Tel = item.eventLast4Tel
         
-        syncValue = parent.scheduleEvent(nowDateTime, item.scheduleStartTime, item.scheduleEndTime, defaultValue, toggleValue)
-        result << sendEvent(name: "lock", value: syncValue)
+        syncValue = parent.scheduleEvent(item.scheduleStartTime, item.scheduleEndTime, [defaultValue: defaultValue, currentValue: currentValue, toggleValue: toggleValue])
     } else {
         logMsg.push("no events found, turning ${defaultValue} lock")
-        result << sendEvent(name: "eventTitle", value: " ")
-        result << sendEvent(name: "eventLocation", value: " ")
-        result << sendEvent(name: "eventAllDay", value: " ")
-        result << sendEvent(name: "eventStartTime", value: " ")
-        result << sendEvent(name: "eventEndTime", value: " ")
-        result << sendEvent(name: "lock", value: defaultValue)
         syncValue = defaultValue
     }
+    
+    result << sendEvent(name: "eventTitle", value: eventTitle )
+    result << sendEvent(name: "eventLocation", value: eventLocation )
+    result << sendEvent(name: "eventAllDay", value: eventAllDay )
+    result << sendEvent(name: "eventStartTime", value: eventStartTime )
+    result << sendEvent(name: "eventEndTime", value: eventEndTime )
+    result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(new Date()), displayed: false)
+    result << sendEvent(name: "lock", value: syncValue)
     
     syncChildDevices(syncValue)
     logDebug("${logMsg}")
@@ -101,6 +121,23 @@ def poll() {
 
 def clearEventCache() {
     parent.clearEventCache()
+}
+
+def engage() {
+    logDebug("Lock - Engage (lock)")
+    sendEvent(name: "lock", value: parent.convertToNative("engage"))
+}
+
+def disengage() {
+    logDebug("Lock - Disengage (unlock)")
+    sendEvent(name: "lock", value: convertToNative("disengage"))
+}
+
+Map nativeMethods() {
+    return [
+        1: [engage: lock()],
+		2: [disengage: unlock()]
+    ]
 }
 
 def syncChildDevices(value) {
