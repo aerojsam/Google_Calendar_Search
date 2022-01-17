@@ -16,7 +16,7 @@ def driverVersion() { return "2.4.2" }
  */
 
 metadata {
-	definition (name: "GCal Switch", namespace: "aerojsam", author: "ritchierich") {
+	definition (name: "GCal Switch", namespace: "aerojsam", author: "Samuel Jimenez") {
 		capability "Sensor"
         capability "Polling"
 		capability "Refresh"
@@ -37,6 +37,15 @@ metadata {
         input name: "switchValue", type: "enum", title: "Switch Default Value", required: true, options:["on","off"]
     }
 }
+
+/*>> DEVICE SETTINGS: SWITCH >>*/
+/* USED BY TRIGGER APP. TO ACCESS, USE parent.<setting>. */
+Map deviceSettings() {
+    return [
+        1: [input: [name: "deviceState", type: "enum", title: "Switch Default State", description: "", defaultValue: "off", options: ["on","off"]], required: true, submitOnChange: true, parameterSize: 1]
+    ]
+}
+/*<< DEVICE SETTINGS: SWITCH <<*/
 
 def installed() {
     initialize()
@@ -63,39 +72,49 @@ def poll() {
     unschedule()
     def logMsg = []
 
-    def nowDateTime = new Date()
     def currentValue = device.currentSwitch
-    def defaultValue = (settings.switchValue == null) ? parent.getDefaultDeviceState() : settings.switchValue
-    def toggleValue = (parent.determineState(defaultValue, currentValue, true) == "engage") ? "on":"off"
-    logMsg.push("poll - BEFORE nowDateTime: ${nowDateTime}, currentValue: ${currentValue} AFTER ")
+    def defaultValue = (settings.switchValue == null) ? parent.deviceState : settings.switchValue
+    def toggleValue = (defaultValue == "on") ? "off":"on" // (parent.determineState(defaultValue, currentValue, true) == "engage") ? "on":"off"
+    logMsg.push("poll - BEFORE (${new Date()}) - currentValue: ${currentValue} AFTER ")
     
     def result = []
     def syncValue
-    result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(nowDateTime), displayed: false)
     def item = parent.getNextEvents()
+	
+    def eventTitle = " "
+    def eventLocation = " "
+    def eventAllDay = " "
+    def eventStartTime = " "
+    def eventEndTime = " "
+    def eventReservationURL = " "
+    def eventLast4Tel = " "
+	
     if (item && item.eventTitle) {
         logMsg.push("event found, item: ${item}")
         
-        result << sendEvent(name: "eventTitle", value: item.eventTitle )
-        result << sendEvent(name: "eventLocation", value: item.eventLocation )
-        result << sendEvent(name: "eventAllDay", value: item.eventAllDay )
-        result << sendEvent(name: "eventStartTime", value: parent.formatDateTime(item.eventStartTime) )
-        result << sendEvent(name: "eventEndTime", value: parent.formatDateTime(item.eventEndTime) )
+        eventTitle = item.eventTitle
+        eventLocation = item.eventLocation
+        eventAllDay = item.eventAllDay
+        eventStartTime = parent.formatDateTime(item.eventStartTime)
+        eventEndTime = parent.formatDateTime(item.eventEndTime)
+        eventReservationURL = item.eventReservationURL
+        eventLast4Tel = item.eventLast4Tel
         
-        syncValue = parent.scheduleEvent(nowDateTime, item.scheduleStartTime, item.scheduleEndTime, defaultValue, toggleValue)
-        result << sendEvent(name: "switch", value: syncValue)
+        syncValue = parent.scheduleEvent(item.scheduleStartTime, item.scheduleEndTime, [defaultValue: defaultValue, currentValue: currentValue, toggleValue: toggleValue])
     } else {
         logMsg.push("no events found, turning ${defaultValue} switch")
-        result << sendEvent(name: "eventTitle", value: " ")
-        result << sendEvent(name: "eventLocation", value: " ")
-        result << sendEvent(name: "eventAllDay", value: " ")
-        result << sendEvent(name: "eventStartTime", value: " ")
-        result << sendEvent(name: "eventEndTime", value: " ")
-        result << sendEvent(name: "switch", value: defaultValue)
         syncValue = defaultValue
     }
+	
+    result << sendEvent(name: "eventTitle", value: eventTitle )
+    result << sendEvent(name: "eventLocation", value: eventLocation )
+    result << sendEvent(name: "eventAllDay", value: eventAllDay )
+    result << sendEvent(name: "eventStartTime", value: eventStartTime )
+    result << sendEvent(name: "eventEndTime", value: eventEndTime )
+    result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(new Date()), displayed: false)
+    result << sendEvent(name: "switch", value: syncValue)
     
-    syncChildDevices(syncValue)
+	parent.syncChildDevices(parent.convertToState(syncValue))
     logDebug("${logMsg}")
     return result
 }
@@ -104,8 +123,21 @@ def clearEventCache() {
     parent.clearEventCache()
 }
 
-def syncChildDevices(value) {
-    parent.syncChildDevices(parent.convertToState(value))
+def engage() {
+    logDebug("Switch - Engage (on)")
+    sendEvent(name: "switch", value: "on")
+}
+
+def disengage() {
+    logDebug("Switch - Disengage (off)")
+    sendEvent(name: "switch", value: "off")
+}
+
+Map nativeMethods() {
+    return [
+        1: [engage: on()],
+		2: [disengage: off()]
+    ]
 }
 
 private logDebug(msg) {
