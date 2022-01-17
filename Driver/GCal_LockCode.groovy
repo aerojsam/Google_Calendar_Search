@@ -30,6 +30,7 @@ metadata {
         attribute "eventLocation", "string"
         attribute "eventStartTime", "string"
         attribute "eventEndTime", "string"
+        attribute "code", "string"
         attribute "eventAllDay", "bool"
         
         command "testUnlockWithCode", ["STRING"]
@@ -42,13 +43,15 @@ metadata {
         input name: "optEncrypt", type: "bool", title: "Enable lockCode encryption", defaultValue: false, description: ""
     }
 }
+String guestCodeName() {
+    return "AirBnB Guest Code"
+}
 
 /*>> DEVICE SETTINGS: LOCKCODE >>*/
 /* USED BY TRIGGER APP. TO ACCESS, USE parent.<setting>. */
 Map deviceSettings() {
     return [
-        1: [input: [name: "deviceState", type: "enum", title: "Lock Default State", description: "", defaultValue: "off", options: ["on","off"]], required: true, submitOnChange: true, parameterSize: 1],
-        2: [input: [name: "lockCodePosition", type: "number", title: "GCal Lock Position [0 to 20]", description: "[0 - 20]", range: "0..20", defaultValue: "0"], required: true, submitOnChange: true, parameterSize: 1]
+        1: [input: [name: "lockCodePosition", type: "number", title: "GCal Lock Position [15 to 20]", description: "[15 - 20]", range: "15..20", defaultValue: "20"], required: true, submitOnChange: true, parameterSize: 1]
     ]
 }
 /*<< DEVICE SETTINGS: LOCKCODE <<*/
@@ -58,6 +61,7 @@ def installed() {
     sendEvent(name:"maxCodes",value:20)
     sendEvent(name:"codeLength",value:4)
     sendEvent(name: "lock", value: settings.lockValue)
+    sendEvent(name: "code", value: "")
 	
 	//add a test lock code
     //setCode(1, "1234", "Hubitat")
@@ -92,7 +96,7 @@ def poll() {
     def defaultValue = "" // let default lockcode be empty
 	def toggleValue
     logMsg.push("poll - BEFORE (${new Date()}) - currentValue: ${currentValue} AFTER ")
-    logMsg.push("device settings - deviceState: ${parent.deviceState} | lockCodePosition: ${parent.lockCodePosition}")
+    logMsg.push("device settings - lockCodePosition: ${parent.lockCodePosition}")
     
     def result = []
     def syncValue
@@ -103,6 +107,8 @@ def poll() {
     def eventAllDay = " "
     def eventStartTime = " "
     def eventEndTime = " "
+	def eventReservationURL = " "
+	def eventLast4Tel = " "
     
     if (item && item.eventTitle) {
         logMsg.push("event found, item: ${item}")
@@ -112,11 +118,11 @@ def poll() {
         eventAllDay = item.eventAllDay
         eventStartTime = parent.formatDateTime(item.eventStartTime)
         eventEndTime = parent.formatDateTime(item.eventEndTime)
+        eventReservationURL = item.eventReservationURL
+        eventLast4Tel = item.eventLast4Tel
 		
 		// get information from calendar to set def toggleValue
-		//device.newLockCode = "6428"
-        
-        toggleValue = "6428"
+		toggleValue = eventLast4Tel
         
         logMsg.push(">>>>>>>>>> currentValue: ${currentValue} | defaultValue: ${defaultValue} | toggleValue: ${toggleValue} <<<<<<<<<<")
         
@@ -128,33 +134,46 @@ def poll() {
         syncValue = defaultValue
     }
     
+    logMsg.push(">>>>>>>>>> syncValue: ${syncValue} <<<<<<<<<<")
+    
     result << sendEvent(name: "eventTitle", value: eventTitle )
     result << sendEvent(name: "eventLocation", value: eventLocation )
     result << sendEvent(name: "eventAllDay", value: eventAllDay )
     result << sendEvent(name: "eventStartTime", value: eventStartTime )
     result << sendEvent(name: "eventEndTime", value: eventEndTime )
     result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(new Date()), displayed: false)
+    result << sendEvent(name: "reservationURL", value: eventReservationURL )
+    result << sendEvent(name: "code", value: eventLast4Tel )
     
-    if (syncValue != "") {
-        syncChildDevices(syncValue)
-    }
+    parent.syncChildDevices(parent.convertToState(syncValue))
     
     logDebug("${logMsg}")
     return result
 }
 
-def engage(data) {
-    logDebug("Lockcode - Engage (set code) data:${data}")
-    setCode(parent.lockCodePosition, data, "GCAL")
+def engage() {
+    Integer currentCode = device.currentValue("code")?.toInteger()
+    
+    logDebug("engage() - Engage/setCode ${currentCode}")
+    setCode(parent.lockCodePosition, "${currentCode}", "${guestCodeName()}")
+    
+    parent.syncChildDevices("engage")
 }
 
-def disengage(data) {
-    logDebug("Lockcode - Disengage (unset code)")
+def disengage() {
+    logDebug("disengage() - Disengage/deleteCode position:${parent.lockCodePosition}")
     deleteCode(parent.lockCodePosition)
+    
+    parent.syncChildDevices("disengage")
 }
 
-def syncChildDevices(value) {
-    parent.syncChildDevices(parent.convertToState(value))
+
+Map nativeMethods() {
+    Integer currentCode = device.currentValue("code")?.toInteger()
+    return [
+        engage: ['setCode', [parent.lockCodePosition, "${currentCode}", "${guestCodeName()}"]],
+        disengage: ['deleteCode', [parent.lockCodePosition]]
+    ]
 }
 
 private logDebug(msg) {
