@@ -75,7 +75,7 @@ def poll() {
     def currentValue = device.currentSwitch
     def defaultValue = (settings.switchValue == null) ? parent.deviceState : settings.switchValue
     def toggleValue = (defaultValue == "on") ? "off":"on" // (parent.determineState(defaultValue, currentValue, true) == "engage") ? "on":"off"
-    logMsg.push("poll - BEFORE (${new Date()}) - currentValue: ${currentValue} AFTER ")
+    logMsg.push("poll - BEFORE (${new Date()}) - currentValue: ${currentValue} | defaultValue: ${defaultValue} | toggleValue: ${toggleValue} ")
     
     def result = []
     def syncValue
@@ -105,16 +105,16 @@ def poll() {
         logMsg.push("no events found, turning ${defaultValue} switch")
         syncValue = defaultValue
     }
-	
+    
     result << sendEvent(name: "eventTitle", value: eventTitle )
     result << sendEvent(name: "eventLocation", value: eventLocation )
     result << sendEvent(name: "eventAllDay", value: eventAllDay )
     result << sendEvent(name: "eventStartTime", value: eventStartTime )
     result << sendEvent(name: "eventEndTime", value: eventEndTime )
     result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(new Date()), displayed: false)
-    result << sendEvent(name: "switch", value: syncValue)
     
 	parent.syncChildDevices(parent.convertToState(syncValue))
+    
     logDebug("${logMsg}")
     return result
 }
@@ -124,19 +124,21 @@ def clearEventCache() {
 }
 
 def engage() {
-    logDebug("Switch - Engage (on)")
+    logDebug("engage() - Engage/on")
     sendEvent(name: "switch", value: "on")
+    parent.syncChildDevices("engage")
 }
 
 def disengage() {
-    logDebug("Switch - Disengage (off)")
+    logDebug("disengage() - Disengage/off")
     sendEvent(name: "switch", value: "off")
+    parent.syncChildDevices("disengage")
 }
 
 Map nativeMethods() {
     return [
-        1: [engage: on()],
-		2: [disengage: off()]
+        engage: ['on', []],
+		disengage: ['off',[]]
     ]
 }
 
