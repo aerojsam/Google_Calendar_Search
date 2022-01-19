@@ -17,7 +17,7 @@ def driverVersion() { return "2.4.2" }
 metadata {
 	definition (name: "GCal Lock", namespace: "aerojsam", author: "Samuel Jimenez") {        
         capability "Actuator"
-        //capability "Lock"
+        capability "Lock"
         capability "Polling"
         capability "Refresh"
         
@@ -37,11 +37,19 @@ metadata {
     }
 }
 
+def lock() {
+    engage()
+}
+
+def unlock() {
+    disengage()
+}
+
 /*>> DEVICE SETTINGS: LOCK >>*/
 /* USED BY TRIGGER APP. TO ACCESS, USE parent.<setting>. */
 Map deviceSettings() {
     return [
-        1: [input: [name: "deviceState", type: "enum", title: "Lock Default State", description: "", defaultValue: "unlock", options: ["lock","unlock"]], required: true, submitOnChange: true, parameterSize: 1]
+        1: [input: [name: "deviceState", type: "enum", title: "Lock Default State", description: "", defaultValue: "unlocked", options: ["locked","unlocked"]], required: true, submitOnChange: true, parameterSize: 1]
     ]
 }
 /*<< DEVICE SETTINGS: LOCK <<*/
@@ -72,8 +80,8 @@ def poll() {
     def logMsg = []
 
     def currentValue = device.currentLock
-    def defaultValue = (settings.lockValue == null) ? parent.getDefaultDeviceState() : settings.lockValue
-    def toggleValue = (defaultValue == "lock") ? "unlock":"lock"
+    def defaultValue = (settings.lockValue == null) ? parent.deviceState : settings.lockValue
+    def toggleValue = (defaultValue == "locked") ? "unlocked":"locked"
 	logMsg.push("poll - BEFORE (${new Date()}) - currentValue: ${currentValue} | defaultValue: ${defaultValue} | toggleValue: ${toggleValue} ")
     
     def result = []
@@ -112,7 +120,8 @@ def poll() {
     result << sendEvent(name: "eventEndTime", value: eventEndTime )
     result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(new Date()), displayed: false)
     
-    syncChildDevices(syncValue)
+    parent.syncChildDevices(syncValue)
+    
     logDebug("${logMsg}")
     return result
 }
@@ -122,14 +131,14 @@ def clearEventCache() {
 }
 
 def engage() {
-	logDebug("engage() - Engage/lock")
-    sendEvent(name: "lock", "locked")
+	logDebug("engage() - Engage/locked")
+    sendEvent(name: "lock", value: "locked")
 	parent.syncChildDevices("engage")
 }
 
 def disengage() {
 	logDebug("disengage() - Disengage/unlocked")
-    sendEvent(name: "lock", "unlocked")
+    sendEvent(name: "lock", value: "unlocked")
 	parent.syncChildDevices("disengage")
 }
 
@@ -138,10 +147,6 @@ Map nativeMethods() {
         engage: [lock, []],
 		disengage: [unlock, []]
     ]
-}
-
-def syncChildDevices(value) {
-    parent.syncChildDevices(parent.convertToState(value))
 }
 
 private logDebug(msg) {
