@@ -38,6 +38,14 @@ metadata {
     }
 }
 
+def on() {
+    engage()
+}
+
+def off() {
+    disengage()
+}
+
 /*>> DEVICE SETTINGS: SWITCH >>*/
 /* USED BY TRIGGER APP. TO ACCESS, USE parent.<setting>. */
 Map deviceSettings() {
