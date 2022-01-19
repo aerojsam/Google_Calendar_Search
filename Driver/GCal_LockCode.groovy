@@ -31,6 +31,7 @@ metadata {
         attribute "eventStartTime", "string"
         attribute "eventEndTime", "string"
         attribute "code", "string"
+        attribute "reservationURL", "string"
         attribute "eventAllDay", "bool"
         
         command "testUnlockWithCode", ["STRING"]
@@ -61,7 +62,6 @@ def installed() {
     sendEvent(name:"maxCodes",value:20)
     sendEvent(name:"codeLength",value:4)
     sendEvent(name: "lock", value: settings.lockValue)
-    sendEvent(name: "code", value: "")
 	
 	//add a test lock code
     //setCode(1, "1234", "Hubitat")
@@ -134,7 +134,7 @@ def poll() {
         syncValue = defaultValue
     }
     
-    logMsg.push(">>>>>>>>>> syncValue: ${syncValue} <<<<<<<<<<")
+    logMsg.push(">>>>>>>>>> syncValue: ${syncValue} ${eventReservationURL} <<<<<<<<<<")
     
     result << sendEvent(name: "eventTitle", value: eventTitle )
     result << sendEvent(name: "eventLocation", value: eventLocation )
@@ -152,7 +152,7 @@ def poll() {
 }
 
 def engage() {
-    Integer currentCode = device.currentValue("code")?.toInteger()
+    String currentCode = getCurrentCode()
     
     logDebug("engage() - Engage/setCode ${currentCode}")
     setCode(parent.lockCodePosition, "${currentCode}", "${guestCodeName()}")
@@ -167,13 +167,29 @@ def disengage() {
     parent.syncChildDevices("disengage")
 }
 
+/*
+Map getCodeMap(lockCodes,codeNumber){
+    Map codeMap = [:]
+    Map lockCode = lockCodes?."${codeNumber}"
+    if (lockCode) {
+        codeMap = ["name":"${lockCode.name}", "code":"${lockCode.code}"]
+    }
+    return codeMap
+}*/
 
 Map nativeMethods() {
-    Integer currentCode = device.currentValue("code")?.toInteger()
-    return [
-        engage: ['setCode', [parent.lockCodePosition, "${currentCode}", "${guestCodeName()}"]],
-        disengage: ['deleteCode', [parent.lockCodePosition]]
-    ]
+    // need to clean this value from potential leading/trailing spaces and unicodes
+    String currentCode = getCurrentCode()
+    log.debug "currentCode: ${currentCode} with size ${currentCode.size()}"
+    
+    if (currentCode) {
+        return [
+            engage: ['setCode', [parent.lockCodePosition, "${currentCode}", "${guestCodeName()}"]],
+            disengage: ['deleteCode', [parent.lockCodePosition]]
+        ]
+    } else {
+        return null
+    }
 }
 
 private logDebug(msg) {
@@ -186,6 +202,10 @@ private logDebug(msg) {
 }
 
 /*>> LOCK CODE HELPERS >>*/
+String getCurrentCode(){
+    return device.currentValue("code").trim().replaceAll("\\D", "")
+}
+
 Boolean changeIsValid(lockCodes,codeMap,codeNumber,code,name){
     //validate proposed lockCode change
     Boolean result = true
