@@ -244,6 +244,8 @@ def updated() {
 }
 
 def initialize() {
+	def childDevice = getChildDevice(state.deviceID)
+	
     state.installed = true
     if ((settings.setOffset == null || settings.setOffset == false) && (settings.offsetStart != null || settings.offsetEnd != null)) {
         app.updateSetting("setOffset", [value:"true", type:"bool"])
@@ -253,7 +255,7 @@ def initialize() {
     updateAppLabel()
     
     // At this point, device has already been created during the spawnDevice() routine
-    childDevice.updateSetting("deviceState",[value:"${deviceState}",type:"enum"])
+    childDevice?.updateSetting("deviceState",[value:"${deviceState}",type:"enum"])
     
     if (!state.isPaused) {
         if ( settings.whenToRun == "Once Per Day" ) {
