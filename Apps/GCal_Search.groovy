@@ -372,6 +372,8 @@ def getNextEvents(watchCalendar, GoogleMatching, search, endTimePreference) {
                     def eventAllDay
                     def eventStartTime
                     def eventEndTime
+                    def eventReservationURL
+                    def eventLast4Tel
                     
                     if (event.start.containsKey('date')) {
                         eventAllDay = true
@@ -386,10 +388,28 @@ def getNextEvents(watchCalendar, GoogleMatching, search, endTimePreference) {
                         eventStartTime = sdf.parse(event.start.dateTime)
                         eventEndTime = sdf.parse(event.end.dateTime)
                     }
+                    
+                    if (event.description) {
+                        log.debug "Found Event Description:"
+                        log.debug "${event.description}"
+                        
+                        def pattern = ~/Reservation .*:\s(.*)\s/
+                        def matcher = (event.description =~ pattern).findAll()
+                        eventReservationURL = matcher[0][1]
+                        
+                        pattern = ~/Phone.*:(.*)/
+                        matcher = (event.description =~ pattern).findAll()
+                        eventLast4Tel = matcher[0][1]
+                        
+                        log.debug "eventReservationURL ${eventReservationURL}"
+                        log.debug "eventLast4Tel ${eventLast4Tel}"
+                    }
 
                     eventDetails.eventAllDay = eventAllDay
                     eventDetails.eventStartTime = eventStartTime
                     eventDetails.eventEndTime = eventEndTime
+                    eventDetails.eventReservationURL = eventReservationURL
+                    eventDetails.eventLast4Tel = eventLast4Tel
                     evs.push(eventDetails)
                 }
             }
