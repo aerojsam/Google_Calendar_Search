@@ -393,9 +393,9 @@ def getNextEvents(watchCalendar, GoogleMatching, search, endTimePreference) {
                         log.debug "Found Event Description:"
                         log.debug "${event.description}"
                         
-                        def pattern = ~/Reservation .*:\s(.*)\s/
+                        def pattern = ~/(https?|ftp|file):\/\/[-a-zA-Z0-9+&@#\/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#\/%=~_|]/
                         def matcher = (event.description =~ pattern).findAll()
-                        eventReservationURL = matcher[0][1]
+                        eventReservationURL = matcher[0][0]
                         
                         pattern = ~/Phone.*:(.*)/
                         matcher = (event.description =~ pattern).findAll()
