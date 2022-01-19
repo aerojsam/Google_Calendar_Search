@@ -493,12 +493,19 @@ def poll() {
 
 def syncChildDevices(deviceState){
 	def childDevice = getChildDevice(state.deviceID)
-    def engageRoutine = childDevice.nativeMethods().get(engage)[0]
+    def devNativeMethods = childDevice.nativeMethods()
+    
+    if (devNativeMethods == null) return
+    
+    def engageRoutine = devNativeMethods.get(engage)[0]
+    def engageRoutineArgs = devNativeMethods.get(engage)[1]
+    def disengageRoutine = devNativeMethods.get(disengage)[0]
+    def disengageRoutineArgs = devNativeMethods.get(disengage)[1]
+    
     log.debug "engageRoutine: ${engageRoutine}"
-    def engageRoutineArgs = childDevice.nativeMethods().get(engage)[1]
     log.debug "engageRoutineArgs: ${engageRoutineArgs}"
-    def disengageRoutine = childDevice.nativeMethods().get(disengage)[0]
-    def disengageRoutineArgs = childDevice.nativeMethods().get(disengage)[1]
+    log.debug "disengageRoutine: ${disengageRoutine}"
+    log.debug "disengageRoutineArgs: ${disengageRoutineArgs}"
     
     if (deviceState == "engage") {
         syncDevices?."${engageRoutine}"(*engageRoutineArgs)
@@ -596,6 +603,11 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
     def currentValue = dataSet.currentValue
     def toggleValue = dataSet.toggleValue
     
+    logDebug("scheduleEvent Data:")
+    logDebug("- scheduleStartTime: ${scheduleStartTime}")
+    logDebug("- scheduleEndTime: ${scheduleEndTime}")
+    logDebug("- dataSet: ${dataSet}")
+    
     if (nowDateTime < scheduleStartTime) {
         scheduleDeviceState(convertToState(toggleValue), scheduleStartTime)
         scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
@@ -604,6 +616,8 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
         if (currentValue != defaultValue) {
             logDebug("Set ${state.deviceType} ${defaultValue}")
             syncValue = defaultValue
+        } else {
+            syncValue = currentValue
         }
     } else {
         // past start time schedule...just schedule for end time
