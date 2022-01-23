@@ -612,28 +612,11 @@ def scheduleEvent(scheduleStartTime, scheduleEndTime, dataSet) {
         scheduleDeviceState(convertToState(toggleValue), scheduleStartTime)
         scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
         logDebug("Scheduling ${toggleValue} for ${state.deviceType} device at ${scheduleStartTime} and ${defaultValue} at ${scheduleEndTime}")
-		// reset to default state if current state is not the default case, before the scheduling triggers
-        if (currentValue != defaultValue) {
-            logDebug("Set ${state.deviceType} ${defaultValue}")
-            syncValue = defaultValue
-        } else {
-            syncValue = currentValue
-        }
     } else {
         // past start time schedule...just schedule for end time
         scheduleDeviceState(convertToState(defaultValue), scheduleEndTime)
         logDebug("Scheduling ${defaultValue} at ${scheduleEndTime}")
-		// reset to default state if current state is not the default case, before the scheduling triggers
-        if (currentValue != toggleValue) {
-            logDebug("Set ${state.deviceType} ${toggleValue}")
-            syncValue = toggleValue
-        } else {
-            // otherwise, just keep the cycle going
-            syncValue = currentValue
-        }
     }
-    
-    return syncValue
 }
 
 def scheduleDeviceState(deviceState, eventTime) {
