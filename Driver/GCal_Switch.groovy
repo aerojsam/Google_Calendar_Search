@@ -25,8 +25,8 @@ metadata {
         attribute "lastUpdated", "string"
         attribute "eventTitle", "string"
         attribute "eventLocation", "string"
-        attribute "eventStartTime", "string"
-        attribute "eventEndTime", "string"
+        attribute "eventStartTimeOffsetted", "string"
+        attribute "eventEndTimeOffsetted", "string"
         attribute "eventAllDay", "bool"
         
         command "clearEventCache"
@@ -86,14 +86,13 @@ def poll() {
     logMsg.push("poll - BEFORE (${new Date()}) - currentValue: ${currentValue} | defaultValue: ${defaultValue} | toggleValue: ${toggleValue} ")
     
     def result = []
-    def syncValue
     def item = parent.getNextEvents()
 	
     def eventTitle = " "
     def eventLocation = " "
     def eventAllDay = " "
-    def eventStartTime = " "
-    def eventEndTime = " "
+    def eventStartTimeOffsetted = " "
+    def eventEndTimeOffsetted = " "
     def eventReservationURL = " "
     def eventLast4Tel = " "
 	
@@ -103,25 +102,22 @@ def poll() {
         eventTitle = item.eventTitle
         eventLocation = item.eventLocation
         eventAllDay = item.eventAllDay
-        eventStartTime = parent.formatDateTime(item.eventStartTime)
-        eventEndTime = parent.formatDateTime(item.eventEndTime)
+        eventStartTimeOffsetted = parent.formatDateTime(item.scheduleStartTime)
+        eventEndTimeOffsetted = parent.formatDateTime(item.scheduleEndTime)
         eventReservationURL = item.eventReservationURL
         eventLast4Tel = item.eventLast4Tel
         
-        syncValue = parent.scheduleEvent(item.scheduleStartTime, item.scheduleEndTime, [defaultValue: defaultValue, currentValue: currentValue, toggleValue: toggleValue])
+        parent.scheduleEvent(eventStartTimeOffsetted, eventEndTimeOffsetted, [defaultValue: defaultValue, currentValue: currentValue, toggleValue: toggleValue])
     } else {
-        logMsg.push("no events found, turning ${defaultValue} switch")
-        syncValue = defaultValue
+        logMsg.push("no events found")
     }
     
     result << sendEvent(name: "eventTitle", value: eventTitle )
     result << sendEvent(name: "eventLocation", value: eventLocation )
     result << sendEvent(name: "eventAllDay", value: eventAllDay )
-    result << sendEvent(name: "eventStartTime", value: eventStartTime )
-    result << sendEvent(name: "eventEndTime", value: eventEndTime )
+    result << sendEvent(name: "eventStartTimeOffsetted", value: eventStartTimeOffsetted )
+    result << sendEvent(name: "eventEndTimeOffsetted", value: eventEndTimeOffsetted )
     result << sendEvent(name: "lastUpdated", value: parent.formatDateTime(new Date()), displayed: false)
-    
-	parent.syncChildDevices(parent.convertToState(syncValue))
     
     logDebug("${logMsg}")
     return result
